@@ -825,4 +825,19 @@ def _session_title(agent: Any) -> str:
 
 if __name__ == "__main__":  # pragma: no cover - exercised as a background process
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    if sys.argv[1:2] == ["--run-delivery"]:
+        # The runner imports the full Hermes dependency graph (`tools.bot_live_delivery` ->
+        # `utils` -> `hermes_yaml` -> `ruamel.yaml`). A session launched through the install
+        # launcher spawns this script with `sys.executable` = the store python, whose
+        # site-packages carries no project dependencies, and the terminal env builder strips
+        # the launcher's PYTHONPATH — so the runner must bootstrap itself like every other
+        # entry point: `hermes_bootstrap` activates the committed dependency generation (or
+        # re-execs onto the managed interpreter) before the graph is touched. `--wait-reply`
+        # stays stdlib-only on purpose: it must outlive a broken-dependency install, where
+        # the bootstrap refuses.
+        try:
+            import hermes_bootstrap  # noqa: F401
+        except ModuleNotFoundError as exc:  # a partial `hermes update` can leave it unregistered
+            if exc.name != "hermes_bootstrap":
+                raise  # it exists but cannot load: skipping it would skip dependency activation
     raise SystemExit(_delivery_main(sys.argv[1:]))

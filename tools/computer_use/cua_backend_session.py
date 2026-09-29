@@ -390,7 +390,12 @@ class _CuaDriverSession:
         name, module = exc.__class__.__name__, getattr(exc.__class__, "__module__", "")
         return (name in {"ClosedResourceError", "BrokenResourceError", "EndOfStream"}
                 or (module.startswith("anyio") and "Resource" in name)
-                or isinstance(exc, (BrokenPipeError, EOFError)))
+                or isinstance(exc, (BrokenPipeError, EOFError))
+                # MCP SDK raises MCPError('Connection closed') (CONNECTION_CLOSED)
+                # when the peer's transport is gone — exactly the reconnect case
+                # this helper exists for. Without this the error escapes as a
+                # generic failure and the session can never self-heal.
+                or (name == "MCPError" and "Connection closed" in str(exc)))
 
     @staticmethod
     def _is_transient_daemon_error(exc: Exception) -> bool:

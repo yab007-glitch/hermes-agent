@@ -1674,6 +1674,22 @@ DEFAULT_CONFIG = {
         # After this many consecutive guardian DENYs in a session, the deny message escalates to a
         # hard-stop (report to user / ask for /approve). Approval resets; 0 off.
         "denial_breaker_threshold": 3,
+        # Fast lane: an optional local typed-decision endpoint (e.g. TypeSafe Jev served on
+        # 127.0.0.1) that can pre-approve the high-confidence "clearly-safe" class of flagged
+        # commands in `smart` mode, skipping the guardian LLM call. APPROVE-ONLY by construction:
+        # every other outcome (uncertain, deny, unreachable, low confidence) falls through to the
+        # guardian LLM, which remains the only deny authority. Disabled by default — enabling it
+        # without a live endpoint only adds one failed local call per flagged command.
+        #   base_url: POST target; receives {"state":..., "questions":...} and answers with the
+        #             typed-answer JSON (see tools/approval_fast_lane.py).
+        #   confidence_floor: minimum per-question probability AND provider confidence to approve.
+        #   timeout: seconds before falling through to the guardian.
+        "fast_lane": {
+            "enabled": False,
+            "base_url": "http://127.0.0.1:11435/",
+            "confidence_floor": 0.95,
+            "timeout": 5,
+        },
         # Case-insensitive fnmatch globs against terminal commands; a match blocks even under --yolo
         # / mode=off. Quote in YAML when starting with * or containing {}/!/: e.g. "git push
         # --force*".

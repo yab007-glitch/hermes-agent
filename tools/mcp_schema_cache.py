@@ -60,14 +60,17 @@ def get_cached_entry(server_name: str, fingerprint: str) -> Optional[dict]:
     """Return cached entry when fingerprint matches (and TTL holds), else None. ``tools/list``
     results may carry ``ttlMs`` (SEP-2549); an entry older than a recorded TTL is a miss so the
     next startup re-probes instead of serving a stale manifest forever. Entries without a TTL
-    never expire. ``cacheScope`` is irrelevant: this cache is per-user local disk."""
+    never expire, and a non-positive TTL (the SDK's default when a server sends no hint) counts
+    as "no TTL" — treating it as instantly-expired made every lazy registration a permanent
+    cache miss. ``cacheScope`` is irrelevant: this cache is per-user local disk."""
     with _cache_lock:
         entry = _load_all().get(server_name)
     if not isinstance(entry, dict) or entry.get("fingerprint") != fingerprint:
         return None
     ttl_ms = entry.get("ttl_ms")
     written_at = entry.get("written_at")
-    expired = (isinstance(ttl_ms, (int, float)) and isinstance(written_at, (int, float))
+    expired = (isinstance(ttl_ms, (int, float)) and float(ttl_ms) > 0
+               and isinstance(written_at, (int, float))
                and (time.time() - written_at) * 1000.0 >= float(ttl_ms))
     return None if expired else entry
 
@@ -78,7 +81,9 @@ def write_cache_entry(server_name: str, fingerprint: str, *, tools: List[dict],
     """Persist tool schemas after a successful live connect. ``ttl_ms`` / ``cache_scope`` are
     the server's ``tools/list`` SEP-2549 hints; ``written_at`` anchors TTL expiry."""
     entry = {"fingerprint": fingerprint, "tools": tools, "utility_tools": utility_tools or []}
-    if isinstance(ttl_ms, (int, float)):
+    if isinstance(ttl_ms, (int, float)) and float(ttl_ms) > 0:
+        # A non-positive value is the SDK's default when the server sent no hint —
+        # recording it would date-stamp the entry as instantly expired.
         entry["ttl_ms"] = ttl_ms
         entry["written_at"] = time.time()
     if cache_scope:

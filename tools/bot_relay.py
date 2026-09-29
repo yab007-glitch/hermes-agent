@@ -487,6 +487,12 @@ def waiter_command(root: Path | str, envelope: dict) -> str:
     bot replies from, so the reply waiter was refused exactly when a bot answered a teammate: the
     message was delivered, the reply never woke the sender. Roster fields ride as argv (``shlex``
     quoted), never as source text, so a hostile handle or connection id stays data.
+
+    Unlike the delivery runner, this entry must NOT import ``hermes_bootstrap``: it is stdlib-only
+    so it can outlive an install whose dependency generation is broken (bootstrap refuses there),
+    and it is spawned exactly like the runner — with the session's ``sys.executable``, which a
+    launcher-started session makes the dependency-less store python. The two share a script, not a
+    dependency contract; do not route both through one bootstrap helper.
     """
     reply_path = str(relay_root(root) / REPLIES_DIR / f"{envelope['id']}.json")
     label = f"@{envelope.get('target_handle', '')} on {envelope.get('target_connection', '')}"

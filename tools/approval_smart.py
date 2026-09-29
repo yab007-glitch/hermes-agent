@@ -133,7 +133,7 @@ def _smart_approve(command: str, description: str) -> str:
 
 def _smart_verdict(command: str, description: str, pattern_key: str,
                    pattern_keys: list[str], session_key: str) -> str:
-    """Run the guardian LLM with observer hooks; 'approve' | 'deny' | 'escalate'.
+    """Run the fast-lane pre-check, then the guardian LLM; 'approve' | 'deny' | 'escalate'.
     Redaction is observer-payload preparation, not approval policy: if it fails,
     skip observability rather than leak raw data or block the LLM decision."""
     try:
@@ -149,7 +149,18 @@ def _smart_verdict(command: str, description: str, pattern_key: str,
         payload = None
     else:
         _ctx._fire_approval_hook("pre_approval_request", **payload)
-    verdict = _smart_approve(command, description)
+    # Fast lane: a local typed-decision model can only APPROVE its high-confidence
+    # clearly-safe class (config-gated, approve-only); every other outcome falls
+    # through to the guardian below, which stays the only DENY authority.
+    verdict = None
+    try:
+        from tools.approval_fast_lane import _fast_lane_verdict
+        verdict = _fast_lane_verdict(command, description)
+    except Exception as exc:  # a fast-lane import/config bug must never block the gate
+        logger.warning("Fast-lane approval unavailable (%s: %s) — continuing to guardian",
+                       type(exc).__name__, exc)
+    if verdict is None:
+        verdict = _smart_approve(command, description)
     if payload is not None and verdict in {"approve", "deny"}:
         _ctx._fire_approval_hook("post_approval_response", **payload, choice=f"smart_{verdict}", decided_by="aux_llm")
     return verdict
